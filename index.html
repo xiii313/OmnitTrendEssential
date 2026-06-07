@@ -91,14 +91,40 @@ src="https://www.facebook.com/tr?id=1705638470861253&ev=PageView&noscript=1"
       <div class="row"><span class="label">fbclid (URL)</span><span class="value" id="dbg-fbclid">—</span></div>
       <div class="row"><span class="label">_fbc (cookie)</span><span class="value" id="dbg-fbc">—</span></div>
       <div class="row"><span class="label">_fbp (cookie)</span><span class="value" id="dbg-fbp">—</span></div>
+      <div class="row"><span class="label">campaign id</span><span class="value" id="dbg-campaign">—</span></div>
+      <div class="row"><span class="label">adset id</span><span class="value" id="dbg-adset">—</span></div>
+      <div class="row"><span class="label">ad id</span><span class="value" id="dbg-ad">—</span></div>
       <div class="row"><span class="label">eventID</span><span class="value" id="dbg-eventid">—</span></div>
       <div class="row"><span class="label">Pixel ID</span><span class="value" id="dbg-pixel">—</span></div>
+      <div class="row"><span class="label">Offer URL</span><span class="value" id="dbg-offer">—</span></div>
     </div>
   </div>
 
   <script>
+    // ========== 配置区 ==========
     const PIXEL_ID = '1705638470861253';
-    const EVENT_NAME = 'Lead';
+    const EVENT_NAME = 'Lead';  // CTA 点击时发给 Meta 的浏览器事件
+    // Everflow / 广告主 Offer 基础链接（只写 Network 给的原始 URL，fbclid/sub 由下方代码自动追加）
+    const OFFER_BASE_URL = 'https://orivelle-official.com/de/products/product-1-c2/?utm_source=aff&uid=264&ev_oid=22&utm_campaign=523';
+    const REDIRECT_DELAY_MS = 300;  // 发完 Pixel 后延迟再跳转，避免 Lead 事件丢失
+
+    /*
+     * 【流量路径说明 — 不在本文件执行，供对照】
+     *
+     * 1) Meta 广告 → 落地页（本 GitHub Pages）
+     *    Ads Manager Website URL 填：
+     *      https://xiii313.github.io/OmnitTrendEssential/
+     *    URL parameters 填（创建广告时在别的项目配置）：
+     *      utm_source=facebook&utm_medium=paid&utm_campaign={{campaign.id}}&utm_content={{adset.id}}&utm_term={{ad.id}}
+     *    Meta 会在用户点击广告时自动追加 fbclid 到落地页 URL，例如：
+     *      ...?fbclid=IwARxxxx&utm_campaign=120214567890&utm_content=...&utm_term=...
+     *
+     * 2) 用户进入落地页后
+     *    - <head> 里 Pixel 已发 PageView
+     *    - Pixel 根据 fbclid 写入 _fbc / _fbp cookie（Meta 标准行为）
+     *
+     * 3) 用户点击 CTA → 见下方 click 监听（发 Lead + 跳转 Offer）
+     */
 
     function getCookie(name) {
       const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
@@ -113,27 +139,89 @@ src="https://www.facebook.com/tr?id=1705638470861253&ev=PageView&noscript=1"
       return 'evt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
     }
 
-    function refreshDebug(eventId) {
+    /*
+     * 【fbc 相关 — 点击 CTA 时会用到】
+     * fbc 不是固定 ID，每个 click 不同，格式：fb.1.{时间戳}.{fbclid}
+     * 优先读 Pixel 写入的 _fbc cookie；若没有则用 fbclid 现场拼（Everflow 文档推荐格式）
+     * 拼好后通过 sub2 带到 Offer URL，供 Network / 广告主 CAPI 使用（plain text，不要 hash）
+     */
+    function getFbcValue(fbclid) {
+      var fbc = getCookie('_fbc');
+      if (fbc) return fbc;
+      if (!fbclid) return null;
+      return 'fb.1.' + Date.now() + '.' + fbclid;
+    }
+
+    /*
+     * 【组装 CTA 跳转 Offer URL】
+     * 在 OFFER_BASE_URL 上追加 Meta / Everflow 需要的参数：
+     *   fbclid  — 从落地页 URL 读取（Meta 广告点击带入）
+     *   sub1    — eventID，与 Pixel Lead 去重
+     *   sub2    — fbc（见 getFbcValue）
+     *   sub3    — fbp cookie
+     *   sub4/5/6 — campaign / adset / ad id（来自 Meta 广告 URL parameters）
+     */
+    function buildOfferUrl(eventId) {
+      var fbclid = getUrlParam('fbclid');
+      var fbc = getFbcValue(fbclid);
+      var fbp = getCookie('_fbp');
+      var url = new URL(OFFER_BASE_URL);
+
+      if (fbclid) url.searchParams.set('fbclid', fbclid);
+      if (eventId) url.searchParams.set('sub1', eventId);
+      if (fbc) url.searchParams.set('sub2', fbc);
+      if (fbp) url.searchParams.set('sub3', fbp);
+
+      var campaignId = getUrlParam('utm_campaign');
+      var adsetId = getUrlParam('utm_content');
+      var adId = getUrlParam('utm_term');
+      if (campaignId) url.searchParams.set('sub4', campaignId);
+      if (adsetId) url.searchParams.set('sub5', adsetId);
+      if (adId) url.searchParams.set('sub6', adId);
+
+      return url.toString();
+    }
+
+    function refreshDebug(eventId, offerUrl) {
       document.getElementById('dbg-fbclid').textContent = getUrlParam('fbclid') || '（无）';
-      document.getElementById('dbg-fbc').textContent = getCookie('_fbc') || '（无，需带 fbclid 访问）';
+      document.getElementById('dbg-fbc').textContent = getFbcValue(getUrlParam('fbclid')) || '（无，需带 fbclid 访问）';
       document.getElementById('dbg-fbp').textContent = getCookie('_fbp') || '（无）';
+      document.getElementById('dbg-campaign').textContent = getUrlParam('utm_campaign') || '（无，Meta 广告 URL 需带 utm_campaign={{campaign.id}}）';
+      document.getElementById('dbg-adset').textContent = getUrlParam('utm_content') || '（无，需 utm_content={{adset.id}}）';
+      document.getElementById('dbg-ad').textContent = getUrlParam('utm_term') || '（无，需 utm_term={{ad.id}}）';
       document.getElementById('dbg-eventid').textContent = eventId || '—';
       document.getElementById('dbg-pixel').textContent = PIXEL_ID;
+      document.getElementById('dbg-offer').textContent = offerUrl || buildOfferUrl(eventId || null);
     }
 
     refreshDebug();
 
+    /*
+     * 【CTA 点击主流程】
+     * 1. 生成 eventID
+     * 2. buildOfferUrl：把 fbclid / fbc(sub2) / fbp 等拼进 Offer 链接
+     * 3. fbq track Lead + eventID → Meta 浏览器事件
+     * 4. 延迟 REDIRECT_DELAY_MS 后 window.location.href 跳转到 Offer（不是跳回落地页）
+     */
     document.getElementById('cta-btn').addEventListener('click', function () {
-      const eventId = generateEventId();
+      var eventId = generateEventId();
+      var offerUrl = buildOfferUrl(eventId);  // 含 fbc → sub2
 
       fbq('track', EVENT_NAME, {}, { eventID: eventId });
 
-      refreshDebug(eventId);
-      document.getElementById('status').textContent =
-        '✓ 已发送 ' + EVENT_NAME + ' 事件（eventID: ' + eventId + '）— 请到 Meta 事件管理器 → 测试事件 查看';
+      refreshDebug(eventId, offerUrl);
+      document.getElementById('status').textContent = '✓ 已发送 ' + EVENT_NAME + '，正在跳转…';
+
+      // Redirect：落地页 → Offer 页（广告主 / Everflow tracking link）
+      setTimeout(function () {
+        window.location.href = offerUrl;
+      }, REDIRECT_DELAY_MS);
     });
 
-    setInterval(function () { refreshDebug(document.getElementById('dbg-eventid').textContent); }, 2000);
+    setInterval(function () {
+      var eventId = document.getElementById('dbg-eventid').textContent;
+      refreshDebug(eventId === '—' ? null : eventId);
+    }, 2000);
   </script>
 
 </body>
