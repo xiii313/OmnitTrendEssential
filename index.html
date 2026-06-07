@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Omnitrend Essential — Meta Pixel 测试</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e8eaed;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      max-width: 520px;
+      width: 100%;
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 16px;
+      padding: 40px 32px;
+      text-align: center;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    p.sub { color: #9aa0b0; font-size: 0.9rem; margin-bottom: 32px; line-height: 1.5; }
+    .cta {
+      display: inline-block;
+      background: #1877f2;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 14px 36px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .cta:hover { background: #166fe5; }
+    .cta:active { background: #1464d0; }
+    .debug {
+      margin-top: 32px;
+      text-align: left;
+      background: #12141c;
+      border: 1px solid #2d3148;
+      border-radius: 8px;
+      padding: 16px;
+      font-size: 0.78rem;
+      line-height: 1.7;
+      word-break: break-all;
+    }
+    .debug h3 { font-size: 0.85rem; margin-bottom: 8px; color: #9aa0b0; }
+    .debug .row { display: flex; gap: 8px; }
+    .debug .label { color: #6b7280; min-width: 90px; flex-shrink: 0; }
+    .debug .value { color: #a5f3fc; }
+    .status { margin-top: 16px; font-size: 0.82rem; color: #6ee7b7; min-height: 1.2em; }
+  </style>
+  <!-- Meta Pixel Code -->
+<script>
+!function(f,b,e,v,n,t,s)
+{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];
+s.parentNode.insertBefore(t,s)}(window, document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '1705638470861253');
+fbq('track', 'PageView');
+</script>
+<noscript><img height="1" width="1" style="display:none"
+src="https://www.facebook.com/tr?id=1705638470861253&ev=PageView&noscript=1"
+/></noscript>
+<!-- End Meta Pixel Code -->
+</head>
+<body>
+
+  <div class="card">
+    <h1>Omnitrend Essential</h1>
+    <p class="sub">Meta Pixel 测试页 — 用于验证 fbc / fbp 与 CTA 转化事件</p>
+
+    <button class="cta" id="cta-btn">立即咨询</button>
+
+    <p class="status" id="status"></p>
+
+    <div class="debug">
+      <h3>调试信息（fbc / fbp / fbclid）</h3>
+      <div class="row"><span class="label">fbclid (URL)</span><span class="value" id="dbg-fbclid">—</span></div>
+      <div class="row"><span class="label">_fbc (cookie)</span><span class="value" id="dbg-fbc">—</span></div>
+      <div class="row"><span class="label">_fbp (cookie)</span><span class="value" id="dbg-fbp">—</span></div>
+      <div class="row"><span class="label">eventID</span><span class="value" id="dbg-eventid">—</span></div>
+      <div class="row"><span class="label">Pixel ID</span><span class="value" id="dbg-pixel">—</span></div>
+    </div>
+  </div>
+
+  <script>
+    const PIXEL_ID = '1705638470861253';
+    const EVENT_NAME = 'Lead';
+
+    function getCookie(name) {
+      const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+      return match ? decodeURIComponent(match[1]) : null;
+    }
+
+    function getUrlParam(name) {
+      return new URLSearchParams(window.location.search).get(name);
+    }
+
+    function generateEventId() {
+      return 'evt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+    }
+
+    function refreshDebug(eventId) {
+      document.getElementById('dbg-fbclid').textContent = getUrlParam('fbclid') || '（无）';
+      document.getElementById('dbg-fbc').textContent = getCookie('_fbc') || '（无，需带 fbclid 访问）';
+      document.getElementById('dbg-fbp').textContent = getCookie('_fbp') || '（无）';
+      document.getElementById('dbg-eventid').textContent = eventId || '—';
+      document.getElementById('dbg-pixel').textContent = PIXEL_ID;
+    }
+
+    refreshDebug();
+
+    document.getElementById('cta-btn').addEventListener('click', function () {
+      const eventId = generateEventId();
+
+      fbq('track', EVENT_NAME, {}, { eventID: eventId });
+
+      refreshDebug(eventId);
+      document.getElementById('status').textContent =
+        '✓ 已发送 ' + EVENT_NAME + ' 事件（eventID: ' + eventId + '）— 请到 Meta 事件管理器 → 测试事件 查看';
+    });
+
+    setInterval(function () { refreshDebug(document.getElementById('dbg-eventid').textContent); }, 2000);
+  </script>
+
+</body>
+</html>
